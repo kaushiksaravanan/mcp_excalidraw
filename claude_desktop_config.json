@@ -1,8 +1,21 @@
 {
+  "preferences": {
+    "chromeExtensionEnabled": true,
+    "localAgentModeTrustedFolders": [
+      "C:\\Users\\I587436\\Downloads\\Verbal"
+    ],
+    "coworkScheduledTasksEnabled": false,
+    "sidebarMode": "code",
+    "bypassPermissionsModeEnabled": true
+  },
   "mcpServers": {
-    "mcp_excalidraw": {
-      "command": "npx",
-      "args": ["-y", "excalidraw-mcp"]
+    "excalidraw": {
+      "command": "node",
+      "args": ["C:\\Users\\I587436\\OneDrive - SAP SE\\Apps\\Github\\mcp_excalidraw\\dist\\index.js"],
+      "env": {
+        "EXPRESS_SERVER_URL": "http://localhost:3000",
+        "ENABLE_CANVAS_SYNC": "true"
+      }
     }
   }
 }
