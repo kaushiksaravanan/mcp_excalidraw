@@ -1,6 +1,6 @@
 ---
 name: excalidraw-skill
-description: Programmatic canvas toolkit for creating, editing, and refining Excalidraw diagrams via MCP tools with real-time canvas sync. Use when an agent needs to (1) draw or lay out diagrams on a live canvas, (2) iteratively refine diagrams using describe_scene and get_canvas_screenshot to see its own work, (3) export/import .excalidraw files or PNG/SVG images, (4) save/restore canvas snapshots, (5) convert Mermaid to Excalidraw, or (6) perform element-level CRUD, alignment, distribution, grouping, duplication, and locking. Requires a running canvas server (EXPRESS_SERVER_URL, default http://localhost:3000).
+description: Programmatic canvas toolkit for creating, editing, and refining Excalidraw diagrams via MCP tools with real-time canvas sync. Use when an agent needs to (1) draw or lay out diagrams on a live canvas, (2) iteratively refine diagrams using describe_scene and get_canvas_screenshot to see its own work, (3) export/import .excalidraw files or PNG/SVG images, (4) save/restore canvas snapshots, (5) convert Mermaid to Excalidraw, (6) perform element-level CRUD/alignment/grouping, or (7) help a user install and configure the Excalidraw MCP server for Claude Desktop, Claude Code, Cursor, Codex CLI, OpenCode, or Antigravity. Requires a running canvas server (EXPRESS_SERVER_URL, default http://localhost:3000).
 ---
 
 # Excalidraw Skill
@@ -21,17 +21,42 @@ curl -s http://localhost:3000/health
 ```
 If you get `{"status":"ok"}` → **use REST API mode**. Use HTTP endpoints (`curl` / `fetch`) from the cheatsheet.
 
-### Check 3: Nothing works → Guide user to install
-If neither works, tell the user:
-> The Excalidraw canvas server is not running. To set up:
-> 1. Clone: `git clone https://github.com/yctimlin/mcp_excalidraw && cd mcp_excalidraw`
-> 2. Build: `npm ci && npm run build`
-> 3. Start canvas: `HOST=0.0.0.0 PORT=3000 npm run canvas`
-> 4. Open `http://localhost:3000` in a browser
-> 5. (Recommended) Install the MCP server for the best experience:
->    ```
->    claude mcp add excalidraw -s user -e EXPRESS_SERVER_URL=http://localhost:3000 -- node /path/to/mcp_excalidraw/dist/index.js
->    ```
+### Check 3: Nothing works → Auto-start the server
+
+If neither MCP nor REST API is available, **do not ask the user to start it manually**. Start it automatically:
+
+1. Find the project directory (look for `start.ps1` / `start.bat` / `package.json` with name `mcp-excalidraw-server`).
+   - Known location: `C:\Users\I587436\OneDrive - SAP SE\Apps\Github\mcp_excalidraw`
+   - Fallback locations: `~/mcp_excalidraw`, `~/Apps/Github/mcp_excalidraw`, or ask the user once if truly unknown.
+
+2. Build if `dist/index.js` is missing:
+   ```bash
+   cd /path/to/mcp_excalidraw
+   npm run build:server
+   ```
+
+3. Start the canvas server in the background:
+   ```bash
+   # macOS / Linux
+   HOST=0.0.0.0 PORT=3000 npm run canvas &
+
+   # Windows (PowerShell)
+   Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$projectDir'; `$env:HOST='0.0.0.0'; `$env:PORT='3000'; npm run canvas"
+   ```
+   Or simply run the shortcut if present:
+   ```bash
+   # Windows — double-click or run:
+   powershell -ExecutionPolicy Bypass -File start.ps1
+   ```
+
+4. Wait up to 5 seconds, then re-run Check 2:
+   ```bash
+   curl -s http://localhost:3000/health
+   ```
+   If still failing after 5 s → report the error output to the user and stop.
+
+5. Tell the user: **"Canvas server started at http://localhost:3000 — opening it in your browser now."**
+   Then open `http://localhost:3000` in the browser if possible.
 
 ### MCP vs REST API Quick Reference
 
@@ -61,6 +86,292 @@ If neither works, tell the user:
 3. **fontFamily**: Must be a string (e.g. `"1"`) or omit it entirely. Do NOT pass a number like `1`.
 4. **Updating labels**: When updating a shape via `PUT /api/elements/:id`, include the full `label` in the update body to preserve it. Omitting `label` from the update won't delete it, but re-sending ensures it renders correctly.
 5. **Screenshot in REST mode**: `POST /api/export/image` returns `{"data": "<base64>"}`. Save to file and read it back for visual verification. Requires browser open.
+
+---
+
+## Step 1: Install & Set Up (First Time Only)
+
+Skip this section if the canvas server is already running and the MCP server is configured.
+
+### What This Repo Contains
+
+Two separate processes:
+- **Canvas server**: web UI + REST API + WebSocket updates (default `http://localhost:3000`)
+- **MCP server**: exposes 26 MCP tools over stdio; syncs to the canvas via `EXPRESS_SERVER_URL`
+
+### Quick Start — Local
+
+Prereqs: Node >= 18, npm
+
+```bash
+npm ci
+npm run build
+```
+
+Terminal 1 — start the canvas:
+```bash
+HOST=0.0.0.0 PORT=3000 npm run canvas
+```
+
+Open `http://localhost:3000` in a browser.
+
+Terminal 2 — run the MCP server (stdio, launched by your MCP client):
+```bash
+EXPRESS_SERVER_URL=http://localhost:3000 node dist/index.js
+```
+
+### Quick Start — Docker
+
+Canvas server:
+```bash
+docker run -d -p 3000:3000 --name mcp-excalidraw-canvas ghcr.io/yctimlin/mcp_excalidraw-canvas:latest
+```
+
+The MCP server (stdio) is launched by your MCP client — see configurations below.
+
+### Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `EXPRESS_SERVER_URL` | URL of the canvas server | `http://localhost:3000` |
+| `ENABLE_CANVAS_SYNC` | Enable real-time canvas sync | `true` |
+
+---
+
+### Configure: Claude Desktop
+
+Config file location:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+**Local (node)**
+```json
+{
+  "mcpServers": {
+    "excalidraw": {
+      "command": "node",
+      "args": ["/absolute/path/to/mcp_excalidraw/dist/index.js"],
+      "env": {
+        "EXPRESS_SERVER_URL": "http://localhost:3000",
+        "ENABLE_CANVAS_SYNC": "true"
+      }
+    }
+  }
+}
+```
+
+**Docker**
+```json
+{
+  "mcpServers": {
+    "excalidraw": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm",
+        "-e", "EXPRESS_SERVER_URL=http://host.docker.internal:3000",
+        "-e", "ENABLE_CANVAS_SYNC=true",
+        "ghcr.io/yctimlin/mcp_excalidraw:latest"]
+    }
+  }
+}
+```
+
+---
+
+### Configure: Claude Code
+
+**Local — user-level** (across all projects):
+```bash
+claude mcp add excalidraw --scope user \
+  -e EXPRESS_SERVER_URL=http://localhost:3000 \
+  -e ENABLE_CANVAS_SYNC=true \
+  -- node /absolute/path/to/mcp_excalidraw/dist/index.js
+```
+
+**Local — project-level** (shared via `.mcp.json`):
+```bash
+claude mcp add excalidraw --scope project \
+  -e EXPRESS_SERVER_URL=http://localhost:3000 \
+  -e ENABLE_CANVAS_SYNC=true \
+  -- node /absolute/path/to/mcp_excalidraw/dist/index.js
+```
+
+**Docker**:
+```bash
+claude mcp add excalidraw --scope user \
+  -- docker run -i --rm \
+  -e EXPRESS_SERVER_URL=http://host.docker.internal:3000 \
+  -e ENABLE_CANVAS_SYNC=true \
+  ghcr.io/yctimlin/mcp_excalidraw:latest
+```
+
+Manage:
+```bash
+claude mcp list               # list configured servers
+claude mcp remove excalidraw  # remove
+```
+
+---
+
+### Configure: Cursor
+
+Config: `.cursor/mcp.json` in project root or `~/.cursor/mcp.json` for global.
+
+**Local (node)**
+```json
+{
+  "mcpServers": {
+    "excalidraw": {
+      "command": "node",
+      "args": ["/absolute/path/to/mcp_excalidraw/dist/index.js"],
+      "env": { "EXPRESS_SERVER_URL": "http://localhost:3000", "ENABLE_CANVAS_SYNC": "true" }
+    }
+  }
+}
+```
+
+**Docker**
+```json
+{
+  "mcpServers": {
+    "excalidraw": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm",
+        "-e", "EXPRESS_SERVER_URL=http://host.docker.internal:3000",
+        "-e", "ENABLE_CANVAS_SYNC=true",
+        "ghcr.io/yctimlin/mcp_excalidraw:latest"]
+    }
+  }
+}
+```
+
+---
+
+### Configure: Codex CLI
+
+**Local (node)**
+```bash
+codex mcp add excalidraw \
+  --env EXPRESS_SERVER_URL=http://localhost:3000 \
+  --env ENABLE_CANVAS_SYNC=true \
+  -- node /absolute/path/to/mcp_excalidraw/dist/index.js
+```
+
+**Docker**
+```bash
+codex mcp add excalidraw \
+  -- docker run -i --rm \
+  -e EXPRESS_SERVER_URL=http://host.docker.internal:3000 \
+  -e ENABLE_CANVAS_SYNC=true \
+  ghcr.io/yctimlin/mcp_excalidraw:latest
+```
+
+Manage: `codex mcp list` / `codex mcp remove excalidraw`
+
+---
+
+### Configure: OpenCode
+
+Config: `~/.config/opencode/opencode.json` or project-level `opencode.json`
+
+**Local (node)**
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "excalidraw": {
+      "type": "local",
+      "command": ["node", "/absolute/path/to/mcp_excalidraw/dist/index.js"],
+      "enabled": true,
+      "environment": { "EXPRESS_SERVER_URL": "http://localhost:3000", "ENABLE_CANVAS_SYNC": "true" }
+    }
+  }
+}
+```
+
+**Docker**
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "excalidraw": {
+      "type": "local",
+      "command": ["docker", "run", "-i", "--rm",
+        "-e", "EXPRESS_SERVER_URL=http://host.docker.internal:3000",
+        "-e", "ENABLE_CANVAS_SYNC=true",
+        "ghcr.io/yctimlin/mcp_excalidraw:latest"],
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
+### Configure: Antigravity (Google)
+
+Config: `~/.gemini/antigravity/mcp_config.json`
+
+**Local (node)**
+```json
+{
+  "mcpServers": {
+    "excalidraw": {
+      "command": "node",
+      "args": ["/absolute/path/to/mcp_excalidraw/dist/index.js"],
+      "env": { "EXPRESS_SERVER_URL": "http://localhost:3000", "ENABLE_CANVAS_SYNC": "true" }
+    }
+  }
+}
+```
+
+**Docker**
+```json
+{
+  "mcpServers": {
+    "excalidraw": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm",
+        "-e", "EXPRESS_SERVER_URL=http://host.docker.internal:3000",
+        "-e", "ENABLE_CANVAS_SYNC=true",
+        "ghcr.io/yctimlin/mcp_excalidraw:latest"]
+    }
+  }
+}
+```
+
+---
+
+### Networking Notes
+
+- **Docker**: Use `host.docker.internal` to reach the canvas server on your host. On Linux you may need `--add-host=host.docker.internal:host-gateway` or `172.17.0.1`.
+- **Canvas server** must be running before the MCP server connects.
+- **Absolute paths**: Replace `/absolute/path/to/mcp_excalidraw` with the actual path where you cloned and built the repo.
+- **In-memory storage**: Restarting the canvas server clears all elements. Use `export_scene` / snapshots for persistence.
+
+### Install This Skill
+
+**Codex CLI**
+```bash
+mkdir -p ~/.codex/skills
+cp -R skills/excalidraw-skill ~/.codex/skills/excalidraw-skill
+```
+
+**Claude Code — user-level** (all projects):
+```bash
+mkdir -p ~/.claude/skills
+cp -R skills/excalidraw-skill ~/.claude/skills/excalidraw-skill
+```
+
+**Claude Code — project-level** (scoped to a project):
+```bash
+mkdir -p /path/to/your/project/.claude/skills
+cp -R skills/excalidraw-skill /path/to/your/project/.claude/skills/excalidraw-skill
+```
+
+To update: remove the old folder first, then re-copy.
+
+---
 
 ## Quality Gate (MANDATORY — read before creating any diagram)
 
@@ -274,6 +585,76 @@ Both are normalized to tuples automatically.
 - `set_viewport` with `scrollToContent: true` — auto-fit all elements (zoom-to-fit).
 - `set_viewport` with `scrollToElementId: "my-element"` — center view on a specific element.
 - `set_viewport` with `zoom: 1.5, offsetX: 100, offsetY: 200` — manual camera control.
+
+## MCP Tools (26 Total)
+
+| Category | Tools |
+|---|---|
+| **Element CRUD** | `create_element`, `get_element`, `update_element`, `delete_element`, `query_elements`, `batch_create_elements`, `duplicate_elements` |
+| **Layout** | `align_elements`, `distribute_elements`, `group_elements`, `ungroup_elements`, `lock_elements`, `unlock_elements` |
+| **Scene Awareness** | `describe_scene`, `get_canvas_screenshot` |
+| **File I/O** | `export_scene`, `import_scene`, `export_to_image`, `export_to_excalidraw_url`, `create_from_mermaid` |
+| **State Management** | `clear_canvas`, `snapshot_scene`, `restore_snapshot` |
+| **Viewport** | `set_viewport` |
+| **Design Guide** | `read_diagram_guide` |
+| **Resources** | `get_resource` |
+
+Full schemas: `tools/list` MCP call or `references/cheatsheet.md`.
+
+---
+
+## Testing
+
+### Canvas Smoke Test (HTTP)
+
+```bash
+curl http://localhost:3000/health
+```
+
+### MCP Smoke Test (MCP Inspector)
+
+List tools:
+```bash
+npx @modelcontextprotocol/inspector --cli \
+  -e EXPRESS_SERVER_URL=http://localhost:3000 \
+  -e ENABLE_CANVAS_SYNC=true -- \
+  node dist/index.js --method tools/list
+```
+
+Create a rectangle:
+```bash
+npx @modelcontextprotocol/inspector --cli \
+  -e EXPRESS_SERVER_URL=http://localhost:3000 \
+  -e ENABLE_CANVAS_SYNC=true -- \
+  node dist/index.js --method tools/call --tool-name create_element \
+  --tool-arg type=rectangle --tool-arg x=100 --tool-arg y=100 \
+  --tool-arg width=300 --tool-arg height=200
+```
+
+### Frontend Screenshots (agent-browser)
+
+```bash
+agent-browser install
+agent-browser open http://127.0.0.1:3000
+agent-browser wait --load networkidle
+agent-browser screenshot /tmp/canvas.png
+```
+
+---
+
+## Troubleshooting
+
+- **Canvas not updating**: confirm `EXPRESS_SERVER_URL` points at the running canvas server.
+- **Updates/deletes fail after batch creation**: ensure you are on a build that includes the batch id preservation fix (v2.0+).
+- **Image export/screenshot not working**: the canvas UI must be open in a browser — `export_to_image` and `get_canvas_screenshot` rely on the frontend for rendering.
+- **Docker on Linux**: use `--add-host=host.docker.internal:host-gateway` if `host.docker.internal` is not resolving.
+
+## Known Issues
+
+- **Persistent storage**: Elements are stored in-memory — restarting the server clears everything. Workaround: use `export_scene` / `snapshot_scene` before stopping.
+- **Image export requires browser**: `export_to_image` and `get_canvas_screenshot` rely on the frontend renderer. The canvas UI must be open in a browser tab.
+
+---
 
 ## References
 
